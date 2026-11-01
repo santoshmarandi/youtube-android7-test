@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 mkdir -p test_results
 
@@ -11,21 +12,25 @@ echo "=== Unlocking Screen ==="
 adb shell input keyevent 82 || true
 adb shell wm dismiss-keyguard || true
 
+MICROG_APK=$(find apks -name "*microg*" | head -n 1)
+YOUTUBE_APK=$(find apks -name "*patched*" -o -name "*youtube*" | head -n 1)
+
+echo "Found MicroG: $MICROG_APK"
+echo "Found YouTube: $YOUTUBE_APK"
+
 echo "=== Installing MicroG ==="
-adb install -r -d apks/microg.apk > test_results/microg_install.log 2>&1
-cat test_results/microg_install.log
+adb install -r -d "$MICROG_APK" 2>&1 | tee test_results/microg_install.log
 
 echo "=== Verifying MicroG package ==="
 adb shell pm list packages | grep -i gms || true
 
 echo "=== Launching MicroG Settings ==="
 adb shell am start -n app.revanced.android.gms/.ui.SettingsActivity || true
-sleep 3
+sleep 5
 adb exec-out screencap -p > test_results/01_microg_launched.png
 
-echo "=== Installing Patched YouTube ReVanced (v20.05.46 minSdk 24) ==="
-adb install -r -d apks/youtube_revanced_v20_patched.apk > test_results/yt_install.log 2>&1
-cat test_results/yt_install.log
+echo "=== Installing Patched YouTube ReVanced ==="
+adb install -r -d "$YOUTUBE_APK" 2>&1 | tee test_results/yt_install.log
 
 echo "=== Verifying YouTube package ==="
 adb shell pm list packages | grep -i rvx || true
