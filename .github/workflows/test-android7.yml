@@ -46,7 +46,7 @@ jobs:
           arch: x86
           profile: Nexus 5X
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -partition-size 4096 -memory 4096
           script: bash ./test_runner.sh
 
       - name: Upload Test Artifacts (Screenshots & Logs)

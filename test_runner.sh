@@ -3,10 +3,18 @@ set -x
 
 mkdir -p test_results
 
+# Start continuous live logcat in background
+adb logcat -v time > test_results/live_logcat.txt 2>&1 &
+LOGCAT_PID=$!
+
 echo "=== System Info ==="
 echo "Android Release: $(adb shell getprop ro.build.version.release)"
 echo "Android SDK: $(adb shell getprop ro.build.version.sdk)"
 echo "CPU ABI: $(adb shell getprop ro.product.cpu.abi)"
+
+# Optimize dexopt for fast installation
+adb shell setprop pm.dexopt.install quicken || true
+adb shell setprop dalvik.vm.dex2oat-filter quicken || true
 
 echo "=== Unlocking Screen ==="
 adb shell input keyevent 82 || true
@@ -25,18 +33,19 @@ echo "=== Verifying MicroG package ==="
 adb shell pm list packages | grep -i gms || true
 
 echo "=== Launching MicroG Settings ==="
-adb shell am start -n app.revanced.android.gms/.ui.SettingsActivity || true
-sleep 5
+adb shell am start -n app.revanced.android.gms/org.microg.gms.ui.SettingsActivity || true
+sleep 3
 adb exec-out screencap -p > test_results/01_microg_launched.png
 
+echo "=== Pushing YouTube ReVanced APK to emulator ==="
+adb push "$YOUTUBE_APK" /data/local/tmp/yt.apk
+
 echo "=== Installing Patched YouTube ReVanced ==="
-adb install -r -d "$YOUTUBE_APK" 2>&1 | tee test_results/yt_install.log
+timeout 180 adb shell pm install -r -d /data/local/tmp/yt.apk 2>&1 | tee test_results/yt_install.log
+adb shell rm -f /data/local/tmp/yt.apk
 
 echo "=== Verifying YouTube package ==="
 adb shell pm list packages | grep -i rvx || true
-
-echo "=== Clearing logcat before launch ==="
-adb logcat -c
 
 echo "=== Launching YouTube ReVanced ==="
 adb shell am start -n app.rvx.android.youtube/com.google.android.apps.youtube.app.watchwhile.WatchWhileActivity || true
@@ -59,10 +68,13 @@ adb shell am start -a android.intent.action.VIEW -d "https://www.youtube.com/wat
 sleep 15
 adb exec-out screencap -p > test_results/04_video_playback_url.png
 
-echo "=== Dumping logcat ==="
-adb logcat -d > test_results/full_logcat.log
-adb logcat -d -s AndroidRuntime:* *:E > test_results/crash_errors.log
+echo "=== Extracting crash errors ==="
+adb logcat -d -s AndroidRuntime:* *:E > test_results/crash_errors.log || true
 
 echo "=== Final Process Status ==="
 adb shell ps | grep -E 'youtube|microg|rvx' || true
+
+# Stop background logcat
+kill $LOGCAT_PID || true
+
 echo "=== Done test runner ==="
