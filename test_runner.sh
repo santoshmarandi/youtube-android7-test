@@ -37,10 +37,6 @@ YOUTUBE_APK=$(find apks -name "*autospoof*" -o -name "*v17*" | head -n 1)
 echo "Found MicroG: $MICROG_APK"
 echo "Found YouTube: $YOUTUBE_APK"
 
-echo "=== Whitelisting Battery Optimizations ==="
-adb shell dumpsys deviceidle whitelist +app.revanced.android.gms || true
-adb shell dumpsys deviceidle whitelist +app.rvx.android.youtube || true
-
 echo "=== Installing MicroG ==="
 adb install -r -d "$MICROG_APK" 2>&1 | tee test_results/microg_install.log
 
@@ -76,17 +72,16 @@ echo "=== Waiting 15 seconds for Home startup & layout load ==="
 sleep 15
 adb exec-out screencap -p > test_results/02_youtube_home.png
 
-# Check if any dismissable prompt appears
-adb shell input keyevent 4 || true
-sleep 2
-adb exec-out screencap -p > test_results/02b_youtube_home_ready.png
+# Dump UI hierarchy of Home
+adb shell uiautomator dump /data/local/tmp/ui_home.xml || true
+adb pull /data/local/tmp/ui_home.xml test_results/ui_home.xml || true
 
 echo "=== Checking Process List after Home Launch ==="
 adb shell ps | grep -E 'youtube|microg|rvx' | tee test_results/ps_after_launch.log
 
-echo "=== Testing Direct Video Playback Intent ==="
+echo "=== Testing Direct Video Playback Intent (UrlActivity) ==="
 # Rick Astley - Never Gonna Give You Up (dQw4w9WgXcQ)
-adb shell am start -n app.rvx.android.youtube/com.google.android.apps.youtube.app.watchwhile.WatchWhileActivity \
+adb shell am start -n app.rvx.android.youtube/com.google.android.youtube.UrlActivity \
   -a android.intent.action.VIEW \
   -d "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
   -p app.rvx.android.youtube || true
@@ -94,6 +89,10 @@ adb shell am start -n app.rvx.android.youtube/com.google.android.apps.youtube.ap
 echo "=== Waiting 15 seconds into video buffering & playback ==="
 sleep 15
 adb exec-out screencap -p > test_results/03_video_playback_active.png
+
+# Dump UI hierarchy of Video player
+adb shell uiautomator dump /data/local/tmp/ui_video.xml || true
+adb pull /data/local/tmp/ui_video.xml test_results/ui_video.xml || true
 
 echo "=== Tap Video Center (540, 400) to expose player controls & playback bar ==="
 adb shell input tap 540 400 || true
