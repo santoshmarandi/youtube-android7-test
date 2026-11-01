@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p apks
-          gh release download v1.0.0-test -p "*v17*" -p "*microg*" -D apks -R ${{ github.repository }}
+          gh release download v1.0.0-test -p "*autospoof*" -p "*microg*" -D apks -R ${{ github.repository }}
           ls -lh apks/
 
       - name: Run Android 7.0 Emulator Test

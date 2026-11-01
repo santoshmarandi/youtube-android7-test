@@ -3,10 +3,6 @@ set -x
 
 mkdir -p test_results
 
-# Restart adb as root for full filesystem access
-adb root || true
-sleep 3
-
 # Start continuous live logcat in background
 adb logcat -v time > test_results/live_logcat.txt 2>&1 &
 LOGCAT_PID=$!
@@ -31,15 +27,19 @@ echo "=== Unlocking Screen ==="
 adb shell input keyevent 82 || true
 adb shell wm dismiss-keyguard || true
 
-# Disable WebView Browser Tester to eliminate any Open With chooser dialog
+# Disable WebView Browser Shell to prevent Open With chooser dialog
 echo "=== Disabling WebView Browser Shell ==="
 adb shell pm disable-user org.chromium.webview_shell || true
 
 MICROG_APK=$(find apks -name "*microg*" | head -n 1)
-YOUTUBE_APK=$(find apks \( -name "*v17*" -o -name "*youtube_android7*" \) | head -n 1)
+YOUTUBE_APK=$(find apks -name "*autospoof*" -o -name "*v17*" | head -n 1)
 
 echo "Found MicroG: $MICROG_APK"
 echo "Found YouTube: $YOUTUBE_APK"
+
+echo "=== Whitelisting Battery Optimizations ==="
+adb shell dumpsys deviceidle whitelist +app.revanced.android.gms || true
+adb shell dumpsys deviceidle whitelist +app.rvx.android.youtube || true
 
 echo "=== Installing MicroG ==="
 adb install -r -d "$MICROG_APK" 2>&1 | tee test_results/microg_install.log
@@ -55,12 +55,7 @@ adb exec-out screencap -p > test_results/01_microg_launched.png
 adb shell input keyevent 4 || true
 sleep 1
 
-# Disable battery optimizations to prevent GmsCore alert
-echo "=== Whitelisting Battery Optimizations ==="
-adb shell dumpsys deviceidle whitelist +app.revanced.android.gms || true
-adb shell dumpsys deviceidle whitelist +app.rvx.android.youtube || true
-
-echo "=== Pushing YouTube ReVanced Android 7 APK to emulator ==="
+echo "=== Pushing Auto-Spoof YouTube ReVanced APK to emulator ==="
 adb push "$YOUTUBE_APK" /data/local/tmp/yt.apk
 
 echo "=== Installing YouTube ReVanced ==="
@@ -74,43 +69,22 @@ adb shell pm list packages | grep -i rvx || true
 adb shell pm grant app.rvx.android.youtube android.permission.WRITE_EXTERNAL_STORAGE || true
 adb shell pm grant app.rvx.android.youtube android.permission.READ_EXTERNAL_STORAGE || true
 
-echo "=== Stage 1: First Run to Fetch Native 17.34.36 Server Layout ==="
+echo "=== Launching Auto-Spoofed YouTube ReVanced Home ==="
 adb shell monkey -p app.rvx.android.youtube -c android.intent.category.LAUNCHER 1 || true
 
-echo "=== Waiting 15 seconds for layout fetch from YouTube servers ==="
+echo "=== Waiting 15 seconds for Home startup & layout load ==="
 sleep 15
-adb exec-out screencap -p > test_results/02_youtube_home_first_run.png
+adb exec-out screencap -p > test_results/02_youtube_home.png
 
-echo "=== Pulling initial shared_prefs ==="
-mkdir -p test_results/shared_prefs_first_run
-adb pull /data/data/app.rvx.android.youtube/shared_prefs test_results/shared_prefs_first_run/ || true
-ls -la test_results/shared_prefs_first_run/ || true
+# Check if any dismissable prompt appears
+adb shell input keyevent 4 || true
+sleep 2
+adb exec-out screencap -p > test_results/02b_youtube_home_ready.png
 
-echo "=== Generating revanced.xml with App Version Spoofing (19.01.34) and Layout Freeze ==="
-python3 configure_spoof.py test_results/shared_prefs_first_run/shared_prefs/youtube.xml revanced.xml || \
-python3 configure_spoof.py test_results/shared_prefs_first_run/youtube.xml revanced.xml || true
-cat revanced.xml
-
-echo "=== Pushing configured revanced.xml to app ==="
-adb push revanced.xml /data/data/app.rvx.android.youtube/shared_prefs/revanced.xml
-APP_UID=$(adb shell stat -c '%u:%g' /data/data/app.rvx.android.youtube | tr -d '\r')
-adb shell chown "$APP_UID" /data/data/app.rvx.android.youtube/shared_prefs/revanced.xml || true
-adb shell chmod 660 /data/data/app.rvx.android.youtube/shared_prefs/revanced.xml || true
-
-echo "=== Restarting YouTube with Spoofing & Frozen Layout Active ==="
-adb shell am force-stop app.rvx.android.youtube
-sleep 3
-
-adb shell monkey -p app.rvx.android.youtube -c android.intent.category.LAUNCHER 1 || true
-
-echo "=== Waiting 12 seconds for Spoofed Home startup ==="
-sleep 12
-adb exec-out screencap -p > test_results/03_youtube_home_spoofed.png
-
-echo "=== Checking Process List after Spoofed Launch ==="
+echo "=== Checking Process List after Home Launch ==="
 adb shell ps | grep -E 'youtube|microg|rvx' | tee test_results/ps_after_launch.log
 
-echo "=== Stage 2: Direct Video Playback Intent ==="
+echo "=== Testing Direct Video Playback Intent ==="
 # Rick Astley - Never Gonna Give You Up (dQw4w9WgXcQ)
 adb shell am start -n app.rvx.android.youtube/com.google.android.apps.youtube.app.watchwhile.WatchWhileActivity \
   -a android.intent.action.VIEW \
@@ -119,16 +93,16 @@ adb shell am start -n app.rvx.android.youtube/com.google.android.apps.youtube.ap
 
 echo "=== Waiting 15 seconds into video buffering & playback ==="
 sleep 15
-adb exec-out screencap -p > test_results/04_video_playback_active.png
+adb exec-out screencap -p > test_results/03_video_playback_active.png
 
 echo "=== Tap Video Center (540, 400) to expose player controls & playback bar ==="
 adb shell input tap 540 400 || true
 sleep 3
-adb exec-out screencap -p > test_results/05_video_controls_active.png
+adb exec-out screencap -p > test_results/04_video_controls_active.png
 
 echo "=== Waiting another 15s of continuous playback ==="
 sleep 15
-adb exec-out screencap -p > test_results/06_video_playback_continued.png
+adb exec-out screencap -p > test_results/05_video_playback_continued.png
 
 echo "=== Top Activity Information ==="
 adb shell dumpsys activity top | tee test_results/dumpsys_activity_top.log || true
@@ -136,10 +110,6 @@ adb shell dumpsys activity top | tee test_results/dumpsys_activity_top.log || tr
 echo "=== Media & Audio Status ==="
 adb shell dumpsys media.player | tee test_results/dumpsys_media_player.log || true
 adb shell dumpsys audio | grep -iE 'mode|player|state' | tee test_results/dumpsys_audio.log || true
-
-echo "=== Extracting final shared_prefs ==="
-mkdir -p test_results/shared_prefs_after_spoof
-adb pull /data/data/app.rvx.android.youtube/shared_prefs test_results/shared_prefs_after_spoof/ || true
 
 echo "=== Extracting playback and error logs ==="
 adb logcat -d -s AndroidRuntime:* *:E > test_results/crash_errors.log || true
