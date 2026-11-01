@@ -27,6 +27,10 @@ echo "=== Unlocking Screen ==="
 adb shell input keyevent 82 || true
 adb shell wm dismiss-keyguard || true
 
+# Disable WebView Browser Tester to eliminate any Open With chooser dialog
+echo "=== Disabling WebView Browser Shell ==="
+adb shell pm disable-user org.chromium.webview_shell || true
+
 MICROG_APK=$(find apks -name "*microg*" | head -n 1)
 YOUTUBE_APK=$(find apks \( -name "*v17*" -o -name "*youtube_android7*" \) | head -n 1)
 
@@ -41,8 +45,11 @@ adb shell pm list packages | grep -i gms || true
 
 echo "=== Launching MicroG Settings ==="
 adb shell am start -n app.revanced.android.gms/org.microg.gms.ui.SettingsActivity || true
-sleep 5
+sleep 4
 adb exec-out screencap -p > test_results/01_microg_launched.png
+# Press back to close MicroG Settings UI
+adb shell input keyevent 4 || true
+sleep 1
 
 echo "=== Pushing YouTube ReVanced Android 7 APK to emulator ==="
 adb push "$YOUTUBE_APK" /data/local/tmp/yt.apk
@@ -54,37 +61,56 @@ adb shell rm -f /data/local/tmp/yt.apk
 echo "=== Verifying YouTube package ==="
 adb shell pm list packages | grep -i rvx || true
 
+# Grant storage permissions
+adb shell pm grant app.rvx.android.youtube android.permission.WRITE_EXTERNAL_STORAGE || true
+adb shell pm grant app.rvx.android.youtube android.permission.READ_EXTERNAL_STORAGE || true
+
 echo "=== Launching YouTube ReVanced Home ==="
-adb shell am start -n app.rvx.android.youtube/com.google.android.youtube.app.honeycomb.Shell\$HomeActivity || \
+# Launch using monkey to trigger authentic LAUNCHER intent
 adb shell monkey -p app.rvx.android.youtube -c android.intent.category.LAUNCHER 1 || true
 
-echo "=== Waiting 15 seconds for Home startup & layout load ==="
-sleep 15
+echo "=== Waiting 12 seconds for Home startup & layout load ==="
+sleep 12
 adb exec-out screencap -p > test_results/02_youtube_home.png
 
-echo "=== Checking Process List ==="
+# Check if there is any first-launch dialog / prompt; press back if present
+adb shell input keyevent 4 || true
+sleep 2
+adb exec-out screencap -p > test_results/02b_youtube_home_after_prompt.png
+
+echo "=== Checking Process List after Home Launch ==="
 adb shell ps | grep -E 'youtube|microg|rvx' | tee test_results/ps_after_launch.log
 
-echo "=== Testing Video Playback Intent (vnd.youtube) ==="
-adb shell am start -a android.intent.action.VIEW -d "vnd.youtube:dQw4w9WgXcQ" app.rvx.android.youtube || true
-sleep 12
-adb exec-out screencap -p > test_results/03_video_intent_playback.png
+echo "=== Testing Direct Video Playback Intent ==="
+# Rick Astley - Never Gonna Give You Up (dQw4w9WgXcQ)
+adb shell am start -n app.rvx.android.youtube/com.google.android.apps.youtube.app.watchwhile.WatchWhileActivity \
+  -a android.intent.action.VIEW \
+  -d "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
+  -p app.rvx.android.youtube || true
 
-echo "=== Waiting 10s into playback ==="
+echo "=== Waiting 15 seconds into video buffering & playback ==="
+sleep 15
+adb exec-out screencap -p > test_results/03_video_playback_active.png
+
+echo "=== Tap Video Center (540, 400) to expose player controls & playback bar ==="
+adb shell input tap 540 400 || true
+sleep 3
+adb exec-out screencap -p > test_results/04_video_controls_active.png
+
+echo "=== Waiting another 10s of continuous playback ==="
 sleep 10
-adb exec-out screencap -p > test_results/04_video_playing.png
+adb exec-out screencap -p > test_results/05_video_playing_further.png
 
-echo "=== Testing Video Playback URL (https) ==="
-adb shell am start -a android.intent.action.VIEW -d "https://www.youtube.com/watch?v=dQw4w9WgXcQ" app.rvx.android.youtube || true
-sleep 12
-adb exec-out screencap -p > test_results/05_video_url_playback.png
+echo "=== Top Activity Information ==="
+adb shell dumpsys activity top | tee test_results/dumpsys_activity_top.log || true
 
 echo "=== Media & Audio Status ==="
 adb shell dumpsys media.player | tee test_results/dumpsys_media_player.log || true
 adb shell dumpsys audio | grep -iE 'mode|player|state' | tee test_results/dumpsys_audio.log || true
 
-echo "=== Extracting crash errors ==="
+echo "=== Extracting playback and error logs ==="
 adb logcat -d -s AndroidRuntime:* *:E > test_results/crash_errors.log || true
+adb logcat -d | grep -iE 'exo|player|playback|videoplayback|innertube|googlevideo' | tail -n 100 > test_results/playback_logs.txt || true
 
 echo "=== Final Process Status ==="
 adb shell ps | grep -E 'youtube|microg|rvx' | tee test_results/ps_final.log
