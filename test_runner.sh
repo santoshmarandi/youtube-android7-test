@@ -27,6 +27,10 @@ echo "=== Unlocking Screen ==="
 adb shell input keyevent 82 || true
 adb shell wm dismiss-keyguard || true
 
+# Disable WebView Browser Shell to ensure RVX handles all YouTube URLs exclusively
+echo "=== Disabling WebView Browser Shell ==="
+adb shell pm disable-user org.chromium.webview_shell || true
+
 MICROG_APK=$(find apks -name "*microg*" | head -n 1)
 YOUTUBE_APK=$(find apks -name "*autospoof*" -o -name "*v17*" | head -n 1)
 
@@ -75,17 +79,26 @@ adb pull /data/local/tmp/ui_home.xml test_results/ui_home.xml || true
 echo "=== Checking Process List after Home Launch ==="
 adb shell ps | grep -E 'youtube|microg|rvx' | tee test_results/ps_after_launch.log
 
-echo "=== Testing Video Playback Intent: vnd.youtube:dQw4w9WgXcQ ==="
+echo "=== Testing Direct Video Playback Intent: Rick Astley (dQw4w9WgXcQ) ==="
 adb shell am start -a android.intent.action.VIEW \
-  -d "vnd.youtube:dQw4w9WgXcQ" \
+  -d "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
   -p app.rvx.android.youtube || true
 
 echo "=== Waiting 15 seconds into video buffering & playback ==="
 sleep 15
-adb exec-out screencap -p > test_results/03_video_playback_vnd.png
+adb exec-out screencap -p > test_results/03_video_playback_active.png
 
-adb shell uiautomator dump /data/local/tmp/ui_vnd.xml || true
-adb pull /data/local/tmp/ui_vnd.xml test_results/ui_vnd.xml || true
+adb shell uiautomator dump /data/local/tmp/ui_video.xml || true
+adb pull /data/local/tmp/ui_video.xml test_results/ui_video.xml || true
+
+echo "=== Tap Video Center (540, 400) to expose player controls & timeline ==="
+adb shell input tap 540 400 || true
+sleep 3
+adb exec-out screencap -p > test_results/04_video_controls_active.png
+
+echo "=== Waiting another 15s of continuous playback ==="
+sleep 15
+adb exec-out screencap -p > test_results/05_video_playback_continued.png
 
 echo "=== Testing Media Play Search Intent: Rick Astley ==="
 adb shell am start -a "android.media.action.MEDIA_PLAY_FROM_SEARCH" \
@@ -93,19 +106,10 @@ adb shell am start -a "android.media.action.MEDIA_PLAY_FROM_SEARCH" \
   -p app.rvx.android.youtube || true
 
 sleep 15
-adb exec-out screencap -p > test_results/04_video_playback_search.png
+adb exec-out screencap -p > test_results/06_video_playback_search.png
 
 adb shell uiautomator dump /data/local/tmp/ui_search.xml || true
 adb pull /data/local/tmp/ui_search.xml test_results/ui_search.xml || true
-
-echo "=== Tap Video Center (540, 400) to expose player controls & timeline ==="
-adb shell input tap 540 400 || true
-sleep 3
-adb exec-out screencap -p > test_results/05_video_controls_active.png
-
-echo "=== Waiting another 15s of continuous playback ==="
-sleep 15
-adb exec-out screencap -p > test_results/06_video_playback_continued.png
 
 echo "=== Top Activity Information ==="
 adb shell dumpsys activity top | tee test_results/dumpsys_activity_top.log || true
